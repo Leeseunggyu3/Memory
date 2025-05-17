@@ -10,6 +10,7 @@ public class CardUI : MonoBehaviour
     public bool IsFlipped { get; private set; }  // 현재 앞면이 보이는 상태인가?
     public bool IsLocked { get; private set; }   // 맞춘 카드인가?
 
+    public ParticleSystem matchEffect;
     private Image image;                         // 카드의 Image 컴포넌트
     private Sprite frontSprite;                  // 앞면 이미지
     private Sprite backSprite;                   // 뒷면 이미지
@@ -55,5 +56,10 @@ public class CardUI : MonoBehaviour
     public void Lock()
     {
         IsLocked = true;
+    }
+    public void PlayMatchEffect()
+    {
+        if (matchEffect != null)
+            matchEffect.Play();
     }
 }

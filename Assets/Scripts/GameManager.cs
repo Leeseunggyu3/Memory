@@ -93,6 +93,8 @@ public class GameManager : MonoBehaviour
         {
             // 일치하면 점수 +1
             playerScores[currentPlayer]++;
+            firstCard.PlayMatchEffect();
+            secondCard.PlayMatchEffect();
             firstCard.Lock();
             secondCard.Lock();
         }
