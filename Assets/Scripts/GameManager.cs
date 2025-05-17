@@ -1,34 +1,23 @@
-﻿// 📄 GameManager.cs
-// 역할: 메모리 카드 게임의 핵심 로직 담당 (카드 셔플, 클릭 처리, 턴 전환, 점수 관리)
-
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro; // TextMeshPro를 위한 네임스페이스
+using TMPro;
 
 public class GameManager : MonoBehaviour
 {
     [Header("카드 설정")]
-    public GameObject cardPrefab;             // 카드 프리팹
-    public Transform cardParent;              // 카드를 배치할 Panel (GridLayoutGroup이 붙은 오브젝트)
-    public Sprite[] frontSprites;             // 앞면 이미지들 (12개)
-    public Sprite backSprite;                 // 뒷면 공통 이미지
+    public GameObject cardPrefab;
+    public Transform cardParent;         // GridLayoutGroup이 붙은 Panel
+    public Sprite[] frontSprites;
+    public Sprite backSprite;
 
     [Header("UI 요소")]
-    public TextMeshProUGUI turnText;          // 턴 안내 텍스트
-    public TextMeshProUGUI player1ScoreText;  // 플레이어1 점수 표시
-    public TextMeshProUGUI player2ScoreText;  // 플레이어2 점수 표시
+    public TextMeshProUGUI turnText;
+    public TextMeshProUGUI player1ScoreText;
+    public TextMeshProUGUI player2ScoreText;
 
-    private List<CardUI> allCards = new List<CardUI>();
-    private CardUI firstCard = null;
-    private CardUI secondCard = null;
-    private bool isProcessing = false;        // 비교 중일 때 입력 막기
-
-    private int currentPlayer = 0;            // 0: Player1, 1: Player2
-    private int[] playerScores = new int[2];
-
-
+    [Header("사운드")]
     public AudioClip startSound;
     public AudioClip mainSound;
     public AudioClip flipSound;
@@ -40,13 +29,23 @@ public class GameManager : MonoBehaviour
     private AudioSource bgmSource;
     private AudioSource sfxSource;
 
+    private List<CardUI> allCards = new List<CardUI>();
+    private Dictionary<CardUI, Vector2> cardTargets = new Dictionary<CardUI, Vector2>();
 
+    private CardUI firstCard = null;
+    private CardUI secondCard = null;
+    private bool isProcessing = false;
+    private bool isCardGenerated = false;
+
+    private int currentPlayer = 0;
+    private int[] playerScores = new int[2];
 
     void Start()
     {
         AudioSource[] sources = GetComponents<AudioSource>();
         bgmSource = sources[0];
         sfxSource = sources[1];
+        audioSource = GetComponent<AudioSource>();
 
         if (mainSound != null)
         {
@@ -55,58 +54,84 @@ public class GameManager : MonoBehaviour
             bgmSource.Play();
         }
 
-        audioSource = GetComponent<AudioSource>();
         if (startSound != null)
             audioSource.PlayOneShot(startSound);
 
         GenerateCards();
+        StartCoroutine(DistributeCardsSmoothly());
         UpdateTurnUI();
     }
 
-    // 카드 24장을 생성하고 앞면 이미지를 섞는 함수
     void GenerateCards()
     {
-        List<int> cardIds = new List<int>();
-        for (int i = 0; i < frontSprites.Length; i++)
-        {
-            cardIds.Add(i); // 쌍 하나 생성
-            cardIds.Add(i); // 쌍 둘 생성 → 총 24장
-        }
+        int[] ids = new int[24];
+        for (int i = 0; i < 12; i++) { ids[i * 2] = i; ids[i * 2 + 1] = i; }
+        Shuffle(ids);
 
-        Shuffle(cardIds);
-
-        for (int i = 0; i < cardIds.Count; i++)
+        for (int i = 0; i < ids.Length; i++)
         {
             GameObject cardObj = Instantiate(cardPrefab, cardParent);
+            RectTransform rect = cardObj.GetComponent<RectTransform>();
+            rect.anchoredPosition = Vector2.zero; // 중앙에서 시작
+
             CardUI card = cardObj.GetComponent<CardUI>();
-            card.Setup(cardIds[i], frontSprites[cardIds[i]], backSprite, this);
+            card.Setup(ids[i], frontSprites[ids[i]], backSprite, this);
+
+            cardTargets[card] = rect.anchoredPosition; // 목표 위치는 GridLayoutGroup 정렬 이후 설정 예정
             allCards.Add(card);
         }
     }
 
-    // 카드 순서를 섞는 함수 (Fisher-Yates 알고리즘)
-    void Shuffle(List<int> list)
+    IEnumerator DistributeCardsSmoothly()
     {
-        for (int i = list.Count - 1; i > 0; i--)
+        yield return null; // GridLayoutGroup이 정렬 완료되도록 한 프레임 대기
+
+        // 카드 위치 저장 (정렬된 위치 기준)
+        foreach (CardUI card in allCards)
+        {
+            RectTransform rect = card.GetComponent<RectTransform>();
+            cardTargets[card] = rect.anchoredPosition;
+            rect.anchoredPosition = Vector2.zero; // 모두 중앙으로 이동시킴
+            rect.localScale = Vector3.zero;
+        }
+
+        int i = 0;
+        foreach (CardUI card in allCards)
+        {
+            RectTransform rect = card.GetComponent<RectTransform>();
+            Vector2 target = cardTargets[card];
+
+            LeanTween.move(rect, target, 0.5f).setEaseOutBack();
+            LeanTween.scale(rect, Vector3.one, 0.5f).setEaseOutBack();
+
+            if (flipSound != null)
+                sfxSource.PlayOneShot(flipSound);
+
+            i++;
+            yield return new WaitForSeconds(0.04f);
+        }
+
+        isCardGenerated = true;
+    }
+
+    void Shuffle(int[] array)
+    {
+        for (int i = array.Length - 1; i > 0; i--)
         {
             int rand = Random.Range(0, i + 1);
-            (list[i], list[rand]) = (list[rand], list[i]);
+            (array[i], array[rand]) = (array[rand], array[i]);
         }
     }
 
-    // 카드 클릭 시 호출됨
     public void OnCardClicked(CardUI clickedCard)
     {
+        if (!isCardGenerated || isProcessing || clickedCard.IsFlipped || secondCard != null) return;
 
-        if (isProcessing || clickedCard.IsFlipped || secondCard != null) return;
-
-        audioSource.PlayOneShot(flipSound); // 🔊 카드 선택 효과음
+        audioSource.PlayOneShot(flipSound);
         clickedCard.FlipFront();
 
         if (firstCard == null)
-        {
             firstCard = clickedCard;
-        }
         else
         {
             secondCard = clickedCard;
@@ -114,7 +139,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // 두 장의 카드가 같은지 확인하는 코루틴
     IEnumerator CheckMatch()
     {
         isProcessing = true;
@@ -122,7 +146,7 @@ public class GameManager : MonoBehaviour
 
         if (firstCard.CardId == secondCard.CardId)
         {
-            audioSource.PlayOneShot(matchSound); // ✅ 맞췄을 때
+            audioSource.PlayOneShot(matchSound);
             playerScores[currentPlayer]++;
             firstCard.PlayMatchEffect();
             secondCard.PlayMatchEffect();
@@ -131,7 +155,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            audioSource.PlayOneShot(failSound); // ❌ 틀렸을 때
+            audioSource.PlayOneShot(failSound);
             firstCard.FlipBack();
             secondCard.FlipBack();
             currentPlayer = (currentPlayer + 1) % 2;
@@ -140,13 +164,10 @@ public class GameManager : MonoBehaviour
         firstCard = null;
         secondCard = null;
         isProcessing = false;
-
         UpdateTurnUI();
         CheckGameEnd();
     }
 
-
-    // 현재 턴 및 점수 UI 업데이트
     void UpdateTurnUI()
     {
         turnText.text = $"Player {currentPlayer + 1}의 턴";
@@ -154,7 +175,6 @@ public class GameManager : MonoBehaviour
         player2ScoreText.text = $"P2: {playerScores[1]}점";
     }
 
-    // 게임 종료 체크 (모든 카드가 뒤집혔는지)
     void CheckGameEnd()
     {
         foreach (CardUI card in allCards)
@@ -164,17 +184,10 @@ public class GameManager : MonoBehaviour
         }
 
         if (gameEndSound != null)
-            audioSource.PlayOneShot(gameEndSound); // 🏁 게임 끝 사운드
+            audioSource.PlayOneShot(gameEndSound);
 
-        string winner;
-        if (playerScores[0] > playerScores[1])
-            winner = "Player 1 승리!";
-        else if (playerScores[0] < playerScores[1])
-            winner = "Player 2 승리!";
-        else
-            winner = "무승부!";
-
+        string winner = playerScores[0] > playerScores[1] ? "Player 1 승리!" :
+                        playerScores[0] < playerScores[1] ? "Player 2 승리!" : "무승부!";
         turnText.text = $"게임 종료\n{winner}";
     }
-
 }
