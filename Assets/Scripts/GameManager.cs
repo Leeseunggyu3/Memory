@@ -28,8 +28,37 @@ public class GameManager : MonoBehaviour
     private int currentPlayer = 0;            // 0: Player1, 1: Player2
     private int[] playerScores = new int[2];
 
+
+    public AudioClip startSound;
+    public AudioClip mainSound;
+    public AudioClip flipSound;
+    public AudioClip matchSound;
+    public AudioClip failSound;
+    public AudioClip gameEndSound;
+
+    private AudioSource audioSource;
+    private AudioSource bgmSource;
+    private AudioSource sfxSource;
+
+
+
     void Start()
     {
+        AudioSource[] sources = GetComponents<AudioSource>();
+        bgmSource = sources[0];
+        sfxSource = sources[1];
+
+        if (mainSound != null)
+        {
+            bgmSource.clip = mainSound;
+            bgmSource.loop = true;
+            bgmSource.Play();
+        }
+
+        audioSource = GetComponent<AudioSource>();
+        if (startSound != null)
+            audioSource.PlayOneShot(startSound);
+
         GenerateCards();
         UpdateTurnUI();
     }
@@ -68,8 +97,10 @@ public class GameManager : MonoBehaviour
     // 카드 클릭 시 호출됨
     public void OnCardClicked(CardUI clickedCard)
     {
+
         if (isProcessing || clickedCard.IsFlipped || secondCard != null) return;
 
+        audioSource.PlayOneShot(flipSound); // 🔊 카드 선택 효과음
         clickedCard.FlipFront();
 
         if (firstCard == null)
@@ -91,7 +122,7 @@ public class GameManager : MonoBehaviour
 
         if (firstCard.CardId == secondCard.CardId)
         {
-            // 일치하면 점수 +1
+            audioSource.PlayOneShot(matchSound); // ✅ 맞췄을 때
             playerScores[currentPlayer]++;
             firstCard.PlayMatchEffect();
             secondCard.PlayMatchEffect();
@@ -100,13 +131,12 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            // 틀리면 카드 다시 뒷면으로
+            audioSource.PlayOneShot(failSound); // ❌ 틀렸을 때
             firstCard.FlipBack();
             secondCard.FlipBack();
-            currentPlayer = (currentPlayer + 1) % 2; // 턴 전환
+            currentPlayer = (currentPlayer + 1) % 2;
         }
 
-        // 상태 초기화
         firstCard = null;
         secondCard = null;
         isProcessing = false;
@@ -114,6 +144,7 @@ public class GameManager : MonoBehaviour
         UpdateTurnUI();
         CheckGameEnd();
     }
+
 
     // 현재 턴 및 점수 UI 업데이트
     void UpdateTurnUI()
@@ -132,6 +163,9 @@ public class GameManager : MonoBehaviour
                 return;
         }
 
+        if (gameEndSound != null)
+            audioSource.PlayOneShot(gameEndSound); // 🏁 게임 끝 사운드
+
         string winner;
         if (playerScores[0] > playerScores[1])
             winner = "Player 1 승리!";
@@ -142,4 +176,5 @@ public class GameManager : MonoBehaviour
 
         turnText.text = $"게임 종료\n{winner}";
     }
+
 }
