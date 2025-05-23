@@ -4,6 +4,8 @@ using UnityEngine;
 using TMPro;
 using System.Net.Sockets;
 using System;
+using System.IO;
+using System.Text;
 
 public class GameManager : MonoBehaviour
 {
@@ -83,6 +85,12 @@ public class GameManager : MonoBehaviour
             Stream = Client.GetStream();
 
             Debug.Log("서버에 연결되었습니다.");
+
+            // 서버로부터 메시지 수신
+            byte[] buffer = new byte[256];
+            int bytesRead = Stream.Read(buffer, 0, buffer.Length);
+            string message = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+            Debug.Log("서버로부터 수신: " + message);
         }
         catch (Exception e)
         {
