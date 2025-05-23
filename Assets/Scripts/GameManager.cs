@@ -4,9 +4,21 @@ using UnityEngine;
 using TMPro;
 using System.Net.Sockets;
 using System;
+using System.Runtime.InteropServices;
 
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct Card // 카드 전송을 위해 만듦
+{
+    public int id; // 카드 id 번호
+    public byte isFlip; // 카드가 앞면인가? (뒤집혔는가)
+    public byte isLock; // 맞춘 카드인가
+
+    //[MarshalAs(UnmanagedType.ByValArray, SizeConst = 20)]
+    //public byte[] name; 
+};
 public class GameManager : MonoBehaviour
 {
+    public const int CARD_COUNT = 24;
     [Header("카드 설정")]
     public GameObject cardPrefab;
     public Transform cardParent;         // GridLayoutGroup이 붙은 Panel
@@ -42,7 +54,7 @@ public class GameManager : MonoBehaviour
     private int[] playerScores = new int[2];
 
     #region Server
-    const string IP = "127.0.0.1";
+    const string IP = "172.30.1.89";
     const int PORT = 8888;
 
     TcpClient Client;
@@ -76,6 +88,11 @@ public class GameManager : MonoBehaviour
 
     void TryConnect()
     {
+        int bytesRead = 0;
+        int cardSize = Marshal.SizeOf<Card>(); // 구조체 크기 계산
+        byte[] buffer = new byte[cardSize * CARD_COUNT];
+        Card[] cards = new Card[CARD_COUNT];
+
         try
         {
             Client = new TcpClient();
@@ -83,6 +100,27 @@ public class GameManager : MonoBehaviour
             Stream = Client.GetStream();
 
             Debug.Log("서버에 연결되었습니다.");
+
+            while (bytesRead < buffer.Length)
+            {
+                int read = Stream.Read(buffer, bytesRead, buffer.Length - bytesRead);
+                if (read == 0)
+                {
+                    Debug.Log("서버 연결 끊겼는데요.");
+                    break;
+                }
+                bytesRead += read;
+            }
+            for (int i = 0; i < CARD_COUNT; i++) 
+            {
+                byte[] slice = new byte[cardSize]; // 받은 바이트
+                Array.Copy(buffer, i * cardSize, slice, 0, cardSize); // 받은 byte 잘라서 각 배열 원소에 저장
+
+                GCHandle handle = GCHandle.Alloc(slice, GCHandleType.Pinned); // 가비지 컬렉션 호출 막음
+                cards[i] = Marshal.PtrToStructure<Card>(handle.AddrOfPinnedObject()); // 받은 byte 배열을 Card 구조체 형태로 변환
+                Debug.Log($"현재 생성된 카드 ID : {cards[i].id}"); // 로그 출력
+                handle.Free();
+            }
         }
         catch (Exception e)
         {
