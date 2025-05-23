@@ -1,8 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
+using System.Net.Sockets;
+using System;
 
 public class GameManager : MonoBehaviour
 {
@@ -40,8 +41,19 @@ public class GameManager : MonoBehaviour
     private int currentPlayer = 0;
     private int[] playerScores = new int[2];
 
+    #region Server
+    const string IP = "127.0.0.1";
+    const int PORT = 8888;
+
+    TcpClient Client;
+    NetworkStream Stream;
+    #endregion
+
     void Start()
     {
+        TryConnect();
+        // TODO: 접속한 클라이언트가 2명일 때까지 대기
+
         AudioSource[] sources = GetComponents<AudioSource>();
         bgmSource = sources[0];
         sfxSource = sources[1];
@@ -62,8 +74,25 @@ public class GameManager : MonoBehaviour
         UpdateTurnUI();
     }
 
+    void TryConnect()
+    {
+        try
+        {
+            Client = new TcpClient();
+            Client.Connect(IP, PORT);
+            Stream = Client.GetStream();
+
+            Debug.Log("서버에 연결되었습니다.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("서버 연결 실패: " + e.Message);
+        }
+    }
+
     void GenerateCards()
     {
+        // TODO: 서버에서 카드 생성해서 클라이언트에게 보내기
         int[] ids = new int[24];
         for (int i = 0; i < 12; i++) { ids[i * 2] = i; ids[i * 2 + 1] = i; }
         Shuffle(ids);
@@ -118,7 +147,7 @@ public class GameManager : MonoBehaviour
     {
         for (int i = array.Length - 1; i > 0; i--)
         {
-            int rand = Random.Range(0, i + 1);
+            int rand = UnityEngine.Random.Range(0, i + 1);
             (array[i], array[rand]) = (array[rand], array[i]);
         }
     }
