@@ -5,6 +5,7 @@ using TMPro;
 using System.Net.Sockets;
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Card // 카드 전송을 위해 만듦
@@ -12,13 +13,13 @@ public struct Card // 카드 전송을 위해 만듦
     public int id; // 카드 id 번호
     public byte isFlip; // 카드가 앞면인가? (뒤집혔는가)
     public byte isLock; // 맞춘 카드인가
-
     //[MarshalAs(UnmanagedType.ByValArray, SizeConst = 20)]
-    //public byte[] name; 
 };
+
 public class GameManager : MonoBehaviour
 {
     public const int CARD_COUNT = 24;
+
     [Header("카드 설정")]
     public GameObject cardPrefab;
     public Transform cardParent;         // GridLayoutGroup이 붙은 Panel
@@ -88,18 +89,26 @@ public class GameManager : MonoBehaviour
 
     void TryConnect()
     {
-        int bytesRead = 0;
-        int cardSize = Marshal.SizeOf<Card>(); // 구조체 크기 계산
-        byte[] buffer = new byte[cardSize * CARD_COUNT];
-        Card[] cards = new Card[CARD_COUNT];
-
         try
         {
+            int bytesRead = 0;
+            int cardSize = Marshal.SizeOf<Card>(); // 구조체 크기 계산
+            byte[] buffer = new byte[cardSize * CARD_COUNT];
+            Card[] cards = new Card[CARD_COUNT];
+
             Client = new TcpClient();
             Client.Connect(IP, PORT);
             Stream = Client.GetStream();
-
             Debug.Log("서버에 연결되었습니다.");
+
+            // 서버로부터 메시지 수신
+            {
+                byte[] buf = new byte[255];
+                int read = Stream.Read(buf, 0, buf.Length);
+
+                string message = Encoding.UTF8.GetString(buf, 0, read);
+                Debug.Log("서버로부터 수신: " + message);
+            }
 
             while (bytesRead < buffer.Length)
             {
@@ -111,7 +120,8 @@ public class GameManager : MonoBehaviour
                 }
                 bytesRead += read;
             }
-            for (int i = 0; i < CARD_COUNT; i++) 
+
+            for (int i = 0; i < CARD_COUNT; i++)
             {
                 byte[] slice = new byte[cardSize]; // 받은 바이트
                 Array.Copy(buffer, i * cardSize, slice, 0, cardSize); // 받은 byte 잘라서 각 배열 원소에 저장
