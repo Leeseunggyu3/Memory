@@ -241,6 +241,19 @@ public class GameManager : MonoBehaviour
     {
         if (!isCardGenerated || isProcessing || clickedCard.IsFlipped || secondCard != null) return;
 
+        Debug.Log($"card id {clickedCard.CardId} 클릭");
+
+        #region Server
+        int index = allCards.IndexOf(clickedCard);
+        byte[] bytes = BitConverter.GetBytes(index);
+
+        if (BitConverter.IsLittleEndian == false)
+            Array.Reverse(bytes);
+
+        Debug.Log($"card index {index}");
+        Stream.Write(bytes, 0, bytes.Length);   // 선택한 카드 인덱스 서버에 전송
+        #endregion
+
         audioSource.PlayOneShot(flipSound);
         clickedCard.FlipFront();
 
