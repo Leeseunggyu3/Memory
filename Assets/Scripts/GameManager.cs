@@ -190,4 +190,16 @@ public class GameManager : MonoBehaviour
                         playerScores[0] < playerScores[1] ? "Player 2 승리!" : "무승부!";
         turnText.text = $"게임 종료\n{winner}";
     }
+
+    public void QuitGame()
+    {
+        Debug.Log("게임 종료 시도");
+
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+    Application.Quit();
+#endif
+    }
+
 }
