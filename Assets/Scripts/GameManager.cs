@@ -7,6 +7,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using static Define;
+using System.IO;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Card // 카드 전송을 위해 만듦
@@ -17,10 +18,17 @@ public struct Card // 카드 전송을 위해 만듦
     [MarshalAs(UnmanagedType.I1)]
     public byte isLock; // 맞춘 카드인가
 };
-
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct Player
+{
+	public int score;
+	[MarshalAs(UnmanagedType.I1)]
+	public byte myturn;
+};
 public class GameManager : MonoBehaviour
 {
     public const int CARD_COUNT = 24;
+    public const int PLAYER_COUNT = 2;
 
     [Header("카드 설정")]
     public GameObject cardPrefab;
@@ -57,7 +65,7 @@ public class GameManager : MonoBehaviour
     private int[] playerScores = new int[2];
 
     #region Server
-    const string IP = "172.30.1.89";
+    const string IP = "169.254.94.105";
     const int PORT = 8888;
 
     TcpClient Client;
@@ -65,6 +73,7 @@ public class GameManager : MonoBehaviour
     #endregion
 
     Card[] Cards = new Card[CARD_COUNT];
+    Player[] Players = new Player[PLAYER_COUNT];
 
     void Start()
     {
@@ -158,51 +167,42 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void GenerateCards()
+    T[] RecvByteToStruct<T>(NetworkStream stream, int count) where T : struct
     {
-        //int[] ids = new int[24];
-        //for (int i = 0; i < 12; i++) { ids[i * 2] = i; ids[i * 2 + 1] = i; }
-        //Shuffle(ids);
+        int structSize = Marshal.SizeOf<Card>();
+        byte[] buffer = new byte[structSize * count];
+        int byteread = 0;
 
-        //for (int i = 0; i < ids.Length; i++)
-        //{
-        //    GameObject cardObj = Instantiate(cardPrefab, cardParent);
-        //    RectTransform rect = cardObj.GetComponent<RectTransform>();
-        //    rect.anchoredPosition = Vector2.zero; // 중앙에서 시작
-
-        //    CardUI card = cardObj.GetComponent<CardUI>();
-        //    card.Setup(ids[i], frontSprites[ids[i]], backSprite, this);
-
-        //    cardTargets[card] = rect.anchoredPosition; // 목표 위치는 GridLayoutGroup 정렬 이후 설정 예정
-        //    allCards.Add(card);
-        //}
-
-        int bytesRead = 0;
-        int cardSize = Marshal.SizeOf<Card>();
-        byte[] buffer = new byte[cardSize * CARD_COUNT];
-
-        while (bytesRead < buffer.Length)
+        while (byteread < buffer.Length)
         {
-            int read = Stream.Read(buffer, bytesRead, buffer.Length - bytesRead);
-            
+            int read = stream.Read(buffer, byteread, buffer.Length - byteread);
             if (read <= 0)
             {
                 Debug.LogWarning("서버 연결 끊김 또는 오류");
                 break;
             }
-
-            bytesRead += read;
+            byteread += read;
         }
+
+        T[] result = new T[count];
+        for (int i = 0; i < count; i++)
+        {
+            byte[] slice = new byte[structSize];
+            Array.Copy(buffer, i * structSize, slice, 0, structSize);
+
+            GCHandle handle = GCHandle.Alloc(slice, GCHandleType.Pinned);
+            result[i] = Marshal.PtrToStructure<T>(handle.AddrOfPinnedObject());
+            handle.Free();
+        }
+        return result;
+    }
+
+    void GenerateCards()
+    {
+        Cards = RecvByteToStruct<Card>(Stream, CARD_COUNT);
 
         for (int i = 0; i < CARD_COUNT; i++)
         {
-            byte[] slice = new byte[cardSize];
-            Array.Copy(buffer, i * cardSize, slice, 0, cardSize); // 받은 byte 잘라서 각 배열 원소에 저장
-
-            GCHandle handle = GCHandle.Alloc(slice, GCHandleType.Pinned); // 가비지 컬렉션 호출 막음
-            Cards[i] = Marshal.PtrToStructure<Card>(handle.AddrOfPinnedObject()); // 받은 byte 배열을 Card 구조체 형태로 변환
-            handle.Free();
-
             Debug.Log($"서버로부터 수신: card id {Cards[i].id}");
 
             #region Card UI 생성
@@ -289,15 +289,23 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    IEnumerator CheckMatch()
+    IEnumerator CheckMatch() // 카드를 선택했을 때
     {
         isProcessing = true;
         yield return new WaitForSeconds(1f);
 
-        if (firstCard.CardId == secondCard.CardId)
+        Players = RecvByteToStruct<Player>(Stream, PLAYER_COUNT); // 각 플레이어 정보 불러옴
+
+        if (firstCard.CardId == secondCard.CardId) // 카드가 같다면
         {
             audioSource.PlayOneShot(matchSound);
-            playerScores[currentPlayer]++;
+
+            for (int i = 0; i < PLAYER_COUNT; i++) // 플레이어 개수에 따라
+            {
+                playerScores[currentPlayer] = Players[i].score; // 받아온 점수 업데이트
+                Debug.Log($"플레이어{i}의 점수 : {playerScores[currentPlayer]}");
+            }
+            audioSource.PlayOneShot(matchSound);
             firstCard.PlayMatchEffect();
             secondCard.PlayMatchEffect();
             firstCard.Lock();
