@@ -89,6 +89,8 @@ public class GameManager : MonoBehaviour
 
         GenerateCards();
         StartCoroutine(DistributeCardsSmoothly());
+
+        WaitForMyTurn();
         UpdateTurnUI();
     }
 
@@ -131,6 +133,27 @@ public class GameManager : MonoBehaviour
             Debug.Log("서버로부터 수신: " + message);
 
             if (message == START_GAME)
+                break;
+        }
+    }
+
+    void WaitForMyTurn()
+    {
+        while (true)
+        {
+            byte[] buffer = new byte[1];
+            int read = Stream.Read(buffer, 0, buffer.Length);
+
+            if (read <= 0)
+            {
+                Debug.LogWarning("서버 연결 끊김 또는 오류");
+                break;
+            }
+
+            char message = (char)buffer[0];
+            Debug.Log("서버로부터 수신: " + message);
+
+            if (message == YOUR_TURN)
                 break;
         }
     }
