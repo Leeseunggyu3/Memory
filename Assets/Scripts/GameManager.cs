@@ -27,7 +27,7 @@ public struct Player
 };
 public class GameManager : MonoBehaviour
 {
-    public const int CARD_COUNT = 24;
+    public const int MAX_CARD_COUNT = 24;
     public const int PLAYER_COUNT = 2;
 
     [Header("카드 설정")]
@@ -72,7 +72,7 @@ public class GameManager : MonoBehaviour
     NetworkStream Stream;
     #endregion
 
-    Card[] Cards = new Card[CARD_COUNT];
+    Card[] Cards = new Card[MAX_CARD_COUNT];
     Player[] Players = new Player[PLAYER_COUNT];
 
     void Start()
@@ -129,14 +129,10 @@ public class GameManager : MonoBehaviour
     {
         while (true)
         {
-            byte[] buffer = new byte[1];
-            int read = Stream.Read(buffer, 0, buffer.Length);
+            byte[] buffer = RecvByte(1);
 
-            if (read <= 0)
-            {
-                Debug.LogWarning("서버 연결 끊김 또는 오류");
+            if (buffer == null)
                 break;
-            }
 
             char message = (char)buffer[0];
             Debug.Log("서버로부터 수신: " + message);
@@ -150,14 +146,10 @@ public class GameManager : MonoBehaviour
     {
         while (true)
         {
-            byte[] buffer = new byte[1];
-            int read = Stream.Read(buffer, 0, buffer.Length);
+            byte[] buffer = RecvByte(1);
 
-            if (read <= 0)
-            {
-                Debug.LogWarning("서버 연결 끊김 또는 오류");
+            if (buffer == null)
                 break;
-            }
 
             char message = (char)buffer[0];
             Debug.Log("서버로부터 수신: " + message);
@@ -167,41 +159,11 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    T[] RecvByteToStruct<T>(NetworkStream stream, int count) where T : struct
-    {
-        int structSize = Marshal.SizeOf<Card>();
-        byte[] buffer = new byte[structSize * count];
-        int byteread = 0;
-
-        while (byteread < buffer.Length)
-        {
-            int read = stream.Read(buffer, byteread, buffer.Length - byteread);
-            if (read <= 0)
-            {
-                Debug.LogWarning("서버 연결 끊김 또는 오류");
-                break;
-            }
-            byteread += read;
-        }
-
-        T[] result = new T[count];
-        for (int i = 0; i < count; i++)
-        {
-            byte[] slice = new byte[structSize];
-            Array.Copy(buffer, i * structSize, slice, 0, structSize);
-
-            GCHandle handle = GCHandle.Alloc(slice, GCHandleType.Pinned);
-            result[i] = Marshal.PtrToStructure<T>(handle.AddrOfPinnedObject());
-            handle.Free();
-        }
-        return result;
-    }
-
     void GenerateCards()
     {
-        Cards = RecvByteToStruct<Card>(Stream, CARD_COUNT);
+        Cards = RecvByteToStruct<Card>(Stream, MAX_CARD_COUNT);
 
-        for (int i = 0; i < CARD_COUNT; i++)
+        for (int i = 0; i < MAX_CARD_COUNT; i++)
         {
             Debug.Log($"서버로부터 수신: card id {Cards[i].id}");
 
@@ -305,9 +267,11 @@ public class GameManager : MonoBehaviour
                 playerScores[currentPlayer] = Players[i].score; // 받아온 점수 업데이트
                 Debug.Log($"플레이어{i}의 점수 : {playerScores[currentPlayer]}");
             }
+
             audioSource.PlayOneShot(matchSound);
             firstCard.PlayMatchEffect();
             secondCard.PlayMatchEffect();
+            
             firstCard.Lock();
             secondCard.Lock();
         }
@@ -316,12 +280,14 @@ public class GameManager : MonoBehaviour
             audioSource.PlayOneShot(failSound);
             firstCard.FlipBack();
             secondCard.FlipBack();
-            currentPlayer = (currentPlayer + 1) % 2;
+
+            SwitchTurn();
         }
 
         firstCard = null;
         secondCard = null;
         isProcessing = false;
+
         UpdateTurnUI();
         CheckGameEnd();
     }
@@ -348,4 +314,63 @@ public class GameManager : MonoBehaviour
                         playerScores[0] < playerScores[1] ? "Player 2 승리!" : "무승부!";
         turnText.text = $"게임 종료\n{winner}";
     }
+
+    void SwitchTurn()
+    {
+        currentPlayer = (currentPlayer + 1) % 2;
+    }
+
+    #region Util
+    /// <summary>
+    /// 서버에게 데이터를 받는다.
+    /// </summary>
+    /// <param name="size">버퍼 크기</param>
+    /// <returns></returns>
+    byte[] RecvByte(int size)
+    {
+        byte[] buffer = new byte[size];
+        int read = Stream.Read(buffer, 0, buffer.Length);
+
+        if (read <= 0)
+        {
+            Debug.LogWarning("서버 연결 끊김 또는 오류");
+            return null;
+        }
+
+        return buffer;
+    }
+
+    T[] RecvByteToStruct<T>(NetworkStream stream, int count) where T : struct
+    {
+        int structSize = Marshal.SizeOf<Card>();
+        byte[] buffer = new byte[structSize * count];
+        int byteread = 0;
+
+        while (byteread < buffer.Length)
+        {
+            int read = stream.Read(buffer, byteread, buffer.Length - byteread);
+            if (read <= 0)
+            {
+                Debug.LogWarning("서버 연결 끊김 또는 오류");
+                break;
+            }
+
+            byteread += read;
+        }
+
+        T[] result = new T[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            byte[] slice = new byte[structSize];
+            Array.Copy(buffer, i * structSize, slice, 0, structSize);
+
+            GCHandle handle = GCHandle.Alloc(slice, GCHandleType.Pinned);
+            result[i] = Marshal.PtrToStructure<T>(handle.AddrOfPinnedObject());
+            handle.Free();
+        }
+
+        return result;
+    }
+    #endregion
 }
