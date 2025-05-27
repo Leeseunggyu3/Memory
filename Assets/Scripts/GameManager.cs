@@ -320,6 +320,16 @@ public class GameManager : MonoBehaviour
         currentPlayer = (currentPlayer + 1) % 2;
     }
 
+    public void QuitGame()
+    {
+        Debug.Log("게임 종료 시도");
+        #if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+        #else
+            Application.Quit();
+        #endif
+    }
+
     #region Util
     /// <summary>
     /// 서버에게 데이터를 받는다.
