@@ -18,6 +18,7 @@ public struct Card // 카드 전송을 위해 만듦
     [MarshalAs(UnmanagedType.I1)]
     public byte isLock; // 맞춘 카드인가
 };
+
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Player
 {
@@ -25,6 +26,7 @@ public struct Player
 	[MarshalAs(UnmanagedType.I1)]
 	public byte myturn;
 };
+
 public class GameManager : MonoBehaviour
 {
     public const int MAX_CARD_COUNT = 24;
@@ -226,17 +228,13 @@ public class GameManager : MonoBehaviour
     {
         if (!isCardGenerated || isProcessing || clickedCard.IsFlipped || secondCard != null) return;
 
-        Debug.Log($"card id {clickedCard.CardId} 클릭");
-
         #region Server
         int index = allCards.IndexOf(clickedCard);
-        byte[] bytes = BitConverter.GetBytes(index);
+        Debug.Log($"card index {index} (id: {clickedCard.CardId})");
 
-        if (BitConverter.IsLittleEndian == false)
-            Array.Reverse(bytes);
-
-        Debug.Log($"card index {index}");
-        Stream.Write(bytes, 0, bytes.Length);   // 선택한 카드 인덱스 서버에 전송
+        char msg = PICK_CARD;
+        SendByte(msg);
+        SendByte(index);    // 선택한 카드 인덱스 서버에 전송
         #endregion
 
         audioSource.PlayOneShot(flipSound);
@@ -323,10 +321,12 @@ public class GameManager : MonoBehaviour
     public void QuitGame()
     {
         Debug.Log("게임 종료 시도");
+        SendByte(EXIT);
+
         #if UNITY_EDITOR
-                UnityEditor.EditorApplication.isPlaying = false;
+        UnityEditor.EditorApplication.isPlaying = false;
         #else
-            Application.Quit();
+        Application.Quit();
         #endif
     }
 
@@ -381,6 +381,22 @@ public class GameManager : MonoBehaviour
         }
 
         return result;
+    }
+
+    void SendByte(char data)
+    {
+        byte b = (byte)data;    // 1바이트로 변경 (char: C언어는 1바이트, C#은 2바이트)
+        Stream.WriteByte(b);
+    }
+
+    void SendByte(int data) => Send(BitConverter.GetBytes(data));
+
+    void Send(byte[] bytes)
+    {
+        if (BitConverter.IsLittleEndian == false)
+            Array.Reverse(bytes);
+
+        Stream.Write(bytes, 0, bytes.Length);
     }
     #endregion
 }
