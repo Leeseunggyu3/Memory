@@ -1,13 +1,14 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
-using TMPro;
+using System.IO;
 using System.Net.Sockets;
-using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
+using TMPro;
+using UnityEngine;
 using static Define;
-using System.IO;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Card // 카드 전송을 위해 만듦
@@ -60,14 +61,17 @@ public class GameManager : MonoBehaviour
 
     private CardUI firstCard = null;
     private CardUI secondCard = null;
+
+    private bool _myTurn = false;
     private bool isProcessing = false;
     private bool isCardGenerated = false;
 
     private int currentPlayer = 0;
     private int[] playerScores = new int[2];
 
+
     #region Server
-    const string IP = "169.254.94.105";
+    const string IP = "127.0.0.1";
     const int PORT = 8888;
 
     TcpClient Client;
@@ -77,7 +81,7 @@ public class GameManager : MonoBehaviour
     Card[] Cards = new Card[MAX_CARD_COUNT];
     Player[] Players = new Player[PLAYER_COUNT];
 
-    void Start()
+    async void Start()
     {
         TryConnect();
 
@@ -96,13 +100,7 @@ public class GameManager : MonoBehaviour
         if (startSound != null)
             audioSource.PlayOneShot(startSound);
 
-        WaitForGameStart();
-
-        GenerateCards();
-        StartCoroutine(DistributeCardsSmoothly());
-
-        WaitForMyTurn();
-        UpdateTurnUI();
+        await WaitForGameStart();
     }
 
     void TryConnect()
@@ -127,38 +125,56 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void WaitForGameStart()
+    void TryDisconnect()
     {
-        while (true)
+        try
         {
-            byte[] buffer = RecvByte(1);
-
-            if (buffer == null)
-                break;
-
-            char message = (char)buffer[0];
-            Debug.Log("서버로부터 수신: " + message);
-
-            if (message == START_GAME)
-                break;
+            Stream.Close();
+            Client.Close();
+            Debug.Log("서버 연결 종료 완료");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("서버 연결 종료 중 오류 발생: " + e.Message);
         }
     }
 
-    void WaitForMyTurn()
+    async Task WaitForGameStart()
     {
-        while (true)
+        Debug.Log("대기 중...\n플레이 인원이 모일 때까지 기다려주세요.");
+        // TODO: "플레이 인원이 모일 때까지 기다려주세요."를 안내해주는 UI
+
+        byte[] buffer = await Task.Run(() => RecvByte(1));
+        if (buffer == null)
+            return;
+
+        char message = (char)buffer[0];
+        Debug.Log("서버로부터 수신: " + message);
+
+        if (message == START_GAME)
         {
-            byte[] buffer = RecvByte(1);
+            SendByte(START_GAME);
 
-            if (buffer == null)
-                break;
-
-            char message = (char)buffer[0];
-            Debug.Log("서버로부터 수신: " + message);
-
-            if (message == YOUR_TURN)
-                break;
+            GenerateCards();
+            StartCoroutine(DistributeCardsSmoothly());
+            UpdateTurnUI();
+            
+            await WaitForMyTurn();
         }
+    }
+
+    async Task WaitForMyTurn()
+    {
+        Debug.Log("플레이어 차례 대기 중...");
+        byte[] buffer = await Task.Run(() => RecvByte(1));
+        if (buffer == null)
+            return;
+
+        char message = (char)buffer[0];
+        Debug.Log("서버로부터 수신: " + message);
+
+        if (message == YOUR_TURN)
+            _myTurn = true;
     }
 
     void GenerateCards()
@@ -226,14 +242,16 @@ public class GameManager : MonoBehaviour
 
     public void OnCardClicked(CardUI clickedCard)
     {
+        if (_myTurn == false)
+            return;
+
         if (!isCardGenerated || isProcessing || clickedCard.IsFlipped || secondCard != null) return;
 
         #region Server
         int index = allCards.IndexOf(clickedCard);
         Debug.Log($"card index {index} (id: {clickedCard.CardId})");
 
-        char msg = PICK_CARD;
-        SendByte(msg);
+        SendByte(PICK_CARD);
         SendByte(index);    // 선택한 카드 인덱스 서버에 전송
         #endregion
 
@@ -321,9 +339,13 @@ public class GameManager : MonoBehaviour
     public void QuitGame()
     {
         Debug.Log("게임 종료 시도");
-        SendByte(EXIT);
 
-        #if UNITY_EDITOR
+        #region Server
+        SendByte(EXIT);
+        TryDisconnect();
+        #endregion
+
+#if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
         #else
         Application.Quit();
@@ -338,16 +360,24 @@ public class GameManager : MonoBehaviour
     /// <returns></returns>
     byte[] RecvByte(int size)
     {
-        byte[] buffer = new byte[size];
-        int read = Stream.Read(buffer, 0, buffer.Length);
-
-        if (read <= 0)
+        try
         {
-            Debug.LogWarning("서버 연결 끊김 또는 오류");
+            byte[] buffer = new byte[size];
+            int read = Stream.Read(buffer, 0, buffer.Length);
+
+            if (read <= 0)
+            {
+                Debug.LogWarning("서버 연결 끊김 또는 오류");
+                return null;
+            }
+
+            return buffer;
+        }
+        catch (IOException e)
+        {
+            Debug.LogWarning("Recv 중단됨: " + e.Message);
             return null;
         }
-
-        return buffer;
     }
 
     T[] RecvByteToStruct<T>(NetworkStream stream, int count) where T : struct
