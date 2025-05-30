@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Analytics;
 using static Define;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -23,9 +24,9 @@ public struct Card // 카드 전송을 위해 만듦
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Player
 {
-	public int score;
-	[MarshalAs(UnmanagedType.I1)]
-	public byte myturn;
+    public int score;
+    [MarshalAs(UnmanagedType.I1)]
+    public byte myturn;
 };
 
 public class GameManager : MonoBehaviour
@@ -71,6 +72,7 @@ public class GameManager : MonoBehaviour
 
 
     #region Server
+
     const string IP = "127.0.0.1";
     const int PORT = 8888;
 
@@ -144,12 +146,12 @@ public class GameManager : MonoBehaviour
         Debug.Log("대기 중...\n플레이 인원이 모일 때까지 기다려주세요.");
         // TODO: "플레이 인원이 모일 때까지 기다려주세요."를 안내해주는 UI
 
-        byte[] buffer = await Task.Run(() => RecvByte(1));
+        byte[] buffer = await Task.Run(() => RecvByte(1)); // 다른 쓰레드에서 실행, RecvByte가 블로킹 함수이기 때문
         if (buffer == null)
             return;
 
-        char message = (char)buffer[0];
-        Debug.Log("서버로부터 수신: " + message);
+        byte message = buffer[0];
+        Debug.Log("서버로부터 수신: " + (char)message);
 
         if (message == START_GAME)
         {
@@ -158,23 +160,31 @@ public class GameManager : MonoBehaviour
             GenerateCards();
             StartCoroutine(DistributeCardsSmoothly());
             UpdateTurnUI();
-            
+
             await WaitForMyTurn();
         }
     }
 
-    async Task WaitForMyTurn()
+    async Task WaitForMyTurn() // 현재 누구 차례인지 서버로부터 받아야 함.
     {
         Debug.Log("플레이어 차례 대기 중...");
         byte[] buffer = await Task.Run(() => RecvByte(1));
         if (buffer == null)
             return;
 
-        char message = (char)buffer[0];
-        Debug.Log("서버로부터 수신: " + message);
+        byte message = buffer[0]; 
+        Debug.Log("서버로부터 수신: " + (char)message);
 
-        if (message == YOUR_TURN)
+        if (message == NOT_YOUR_TURN)
+        {
+            _myTurn = false;
+            Debug.Log($"현재 니 턴 아닌데요");
+        }
+        else if (message == YOUR_TURN)
+        {
             _myTurn = true;
+            Debug.Log($"현재 니 턴 맞습니다.");
+        }
     }
 
     void GenerateCards()
@@ -240,29 +250,42 @@ public class GameManager : MonoBehaviour
     //    }
     //}
 
-    public void OnCardClicked(CardUI clickedCard)
+    public async Task OnCardClicked(CardUI clickedCard)
     {
         if (_myTurn == false)
             return;
 
-        if (!isCardGenerated || isProcessing || clickedCard.IsFlipped || secondCard != null) return;
+        // isCardGenerated : 카드 생성 중 카드 선택 방지
+        // isProcessing : 카드 체크 코루틴 중복호출 방지
+        // clickedCard.IsFlipped : 카드 중복 선택 방지
+        // secondCard : 두개 이상의 카드 선택 방지
+        if (!isCardGenerated || isProcessing || clickedCard.IsFlipped || secondCard != null)
+        {
+            Debug.Log($"isCardGenerated : {isCardGenerated}");
+            Debug.Log($"isProcessing : {isProcessing}");
+            Debug.Log($"clickedCard.IsFlipped : {clickedCard.IsFlipped}");
+            Debug.Log($"secondCard : {secondCard}");
+
+            return;
+        }
 
         #region Server
         int index = allCards.IndexOf(clickedCard);
         Debug.Log($"card index {index} (id: {clickedCard.CardId})");
 
-        SendByte(PICK_CARD);
-        SendByte(index);    // 선택한 카드 인덱스 서버에 전송
+        //SendByte(PICK_CARD);
+        SendByte((byte)index);    // 선택한 카드 인덱스 서버에 전송
         #endregion
 
         audioSource.PlayOneShot(flipSound);
         clickedCard.FlipFront();
-
+ 
         if (firstCard == null)
             firstCard = clickedCard;
         else
         {
             secondCard = clickedCard;
+            await WaitForMyTurn();
             StartCoroutine(CheckMatch());
         }
     }
@@ -363,7 +386,7 @@ public class GameManager : MonoBehaviour
         try
         {
             byte[] buffer = new byte[size];
-            int read = Stream.Read(buffer, 0, buffer.Length);
+            int read = Stream.Read(buffer, 0, buffer.Length); // 블로킹
 
             if (read <= 0)
             {
@@ -382,7 +405,8 @@ public class GameManager : MonoBehaviour
 
     T[] RecvByteToStruct<T>(NetworkStream stream, int count) where T : struct
     {
-        int structSize = Marshal.SizeOf<Card>();
+        // 아래의 Marshal.SizeOf<T>();가 Marshal.SizeOf<Card>(); 로 되어 있어 고침
+        int structSize = Marshal.SizeOf<T>();
         byte[] buffer = new byte[structSize * count];
         int byteread = 0;
 
@@ -392,7 +416,7 @@ public class GameManager : MonoBehaviour
             if (read <= 0)
             {
                 Debug.LogWarning("서버 연결 끊김 또는 오류");
-                break;
+                return null;
             }
 
             byteread += read;
@@ -423,8 +447,9 @@ public class GameManager : MonoBehaviour
 
     void Send(byte[] bytes)
     {
-        if (BitConverter.IsLittleEndian == false)
-            Array.Reverse(bytes);
+        // int형 자료가 아닌 byte로만 보내게 바꿧으므로 바이트 정렬 변환이 필요없음
+        //if (BitConverter.IsLittleEndian) 
+        //    Array.Reverse(bytes);
 
         Stream.Write(bytes, 0, bytes.Length);
     }
