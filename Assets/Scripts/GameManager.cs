@@ -8,7 +8,6 @@ using System.Text;
 using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
-using UnityEngine.Analytics;
 using static Define;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -70,9 +69,7 @@ public class GameManager : MonoBehaviour
     private int currentPlayer = 0;
     private int[] playerScores = new int[2];
 
-
     #region Server
-
     const string IP = "127.0.0.1";
     const int PORT = 8888;
 
@@ -175,12 +172,7 @@ public class GameManager : MonoBehaviour
         byte message = buffer[0]; 
         Debug.Log("서버로부터 수신: " + (char)message);
 
-        if (message == NOT_YOUR_TURN)
-        {
-            _myTurn = false;
-            Debug.Log($"현재 니 턴 아닌데요");
-        }
-        else if (message == YOUR_TURN)
+        if (message == YOUR_TURN)
         {
             _myTurn = true;
             Debug.Log($"현재 니 턴 맞습니다.");
@@ -250,7 +242,7 @@ public class GameManager : MonoBehaviour
     //    }
     //}
 
-    public async Task OnCardClicked(CardUI clickedCard)
+    public async void OnCardClicked(CardUI clickedCard)
     {
         if (_myTurn == false)
             return;
@@ -273,8 +265,8 @@ public class GameManager : MonoBehaviour
         int index = allCards.IndexOf(clickedCard);
         Debug.Log($"card index {index} (id: {clickedCard.CardId})");
 
-        //SendByte(PICK_CARD);
-        SendByte((byte)index);    // 선택한 카드 인덱스 서버에 전송
+        SendByte(PICK_CARD);
+        SendByte((byte)index);  // 선택한 카드 인덱스 서버에 전송
         #endregion
 
         audioSource.PlayOneShot(flipSound);
@@ -285,8 +277,10 @@ public class GameManager : MonoBehaviour
         else
         {
             secondCard = clickedCard;
-            await WaitForMyTurn();
             StartCoroutine(CheckMatch());
+
+            _myTurn = false;
+            await WaitForMyTurn();
         }
     }
 
@@ -437,15 +431,12 @@ public class GameManager : MonoBehaviour
         return result;
     }
 
-    void SendByte(char data)
+    void SendByte(byte data)
     {
-        byte b = (byte)data;    // 1바이트로 변경 (char: C언어는 1바이트, C#은 2바이트)
-        Stream.WriteByte(b);
+        Stream.WriteByte(data);
     }
 
-    void SendByte(int data) => Send(BitConverter.GetBytes(data));
-
-    void Send(byte[] bytes)
+    void SendByte(byte[] bytes)
     {
         // int형 자료가 아닌 byte로만 보내게 바꿧으므로 바이트 정렬 변환이 필요없음
         //if (BitConverter.IsLittleEndian) 
