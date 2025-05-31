@@ -30,7 +30,7 @@ public class FullScreenTest : MonoBehaviour
                 Screen.SetResolution(1920, 1080, FullScreenMode.FullScreenWindow);
                 break;
             case 1:
-                Screen.SetResolution(1920, 1080, FullScreenMode.Windowed);
+                Screen.SetResolution(1280, 720, FullScreenMode.Windowed);
                 break;
         }
     }
@@ -39,16 +39,15 @@ public class FullScreenTest : MonoBehaviour
     /// 스크린 모드 변경
     /// </summary>
     /// <param name="mode">변경할 스크린 모드</param>
-    
     private void ChangeFullScreenMode(ScreenMode mode)
     {
         switch (mode)
         {
             case ScreenMode.FullScreenWindow:
-                Screen.fullScreenMode = FullScreenMode.FullScreenWindow;
+                Screen.SetResolution(1920, 1080, FullScreenMode.FullScreenWindow);
                 break;
             case ScreenMode.window:
-                Screen.fullScreenMode = FullScreenMode.Windowed;
+                Screen.SetResolution(1280, 720, FullScreenMode.Windowed);
                 break;
         }
     }

@@ -201,8 +201,6 @@ public class GameManager : MonoBehaviour
 
     async void ShowOpponentPickedCard()
     {
-        Debug.Log($"다른 플레이어가 카드를 골랐습니다.");
-
         //byte[] buffer = await Task.Run(() => RecvByte(4));    // 전달한 index는 byte 받아서 char형이다. 정수형 데이터로 받으면 안되니까 주석 처리
         byte[] buffer = await Task.Run(() => RecvByte(1));
         if (buffer == null) 
