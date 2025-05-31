@@ -161,10 +161,7 @@ public class GameManager : MonoBehaviour
 
         if (message == START_GAME)
         {
-            SendByte(START_GAME);
-
             GenerateCards();
-            StartCoroutine(DistributeCardsSmoothly());
             UpdateTurnUI();
 
             await WaitForMyTurn();
@@ -175,27 +172,26 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log("플레이어 차례 대기 중...");
 
-        while (_myTurn == false)
+        SendByte(WAIT_FOR_MY_TURN);
+
+        byte[] buffer = await Task.Run(() => RecvByte(1));
+        if (buffer == null)
+            return;
+
+        byte message = buffer[0];
+        Debug.Log("서버로부터 수신: " + (char)message);
+
+        // 차례를 기다리는 동안, 다른 플레이어의 플레이를 보여준다.
+        switch (message)
         {
-            byte[] buffer = await Task.Run(() => RecvByte(1));
-            if (buffer == null)
-                return;
+            case YOUR_TURN:
+                Debug.Log($"현재 니 턴 맞습니다.");
+                _myTurn = true;
+                break;
 
-            byte message = buffer[0];
-            Debug.Log("서버로부터 수신: " + (char)message);
-
-            // 차례를 기다리는 동안, 다른 플레이어의 플레이를 보여준다.
-            switch (message)
-            {
-                case YOUR_TURN:
-                    _myTurn = true;
-                    Debug.Log($"현재 니 턴 맞습니다.");
-                    break;
-
-                case PICK_CARD:
-                    ShowOpponentPickedCard();
-                    break;
-            }
+            case PICK_CARD:
+                ShowOpponentPickedCard();
+                break;
         }
     }
 
@@ -216,11 +212,18 @@ public class GameManager : MonoBehaviour
         card.FlipFront();
 
         if (firstCard == null)
+        {
             firstCard = card;
+            SendByte(UPDATE);
+            await WaitForMyTurn();
+        }
         else
         {
             secondCard = card;
-            StartCoroutine(CheckMatch(false));
+            StartCoroutine(CheckMatch(false, async () => {
+                SendByte(UPDATE);
+                await WaitForMyTurn();
+            }));
         }
     }
 
@@ -244,6 +247,8 @@ public class GameManager : MonoBehaviour
             allCards.Add(card);
             #endregion
         }
+
+        StartCoroutine(DistributeCardsSmoothly());
     }
 
     IEnumerator DistributeCardsSmoothly()
@@ -290,7 +295,10 @@ public class GameManager : MonoBehaviour
     public void OnCardClicked(CardUI clickedCard)
     {
         if (_myTurn == false)
+        {
+            Debug.Log("Nope");
             return;
+        }
 
         if (!isCardGenerated || isProcessing || clickedCard.IsFlipped || secondCard != null)
         {
@@ -322,7 +330,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    IEnumerator CheckMatch(bool myTurn = true)  // 카드를 선택했을 때
+    IEnumerator CheckMatch(bool myTurn = true, Action callback = null)    // 카드를 선택했을 때
     {
         isProcessing = true;
         yield return new WaitForSeconds(1f);
@@ -360,12 +368,12 @@ public class GameManager : MonoBehaviour
         secondCard = null;
         isProcessing = false;
 
-        UpdateTurnUI();
+        callback?.Invoke();
+
+        CheckGameEnd();
 
         if (match == false && myTurn)
             SwitchTurn();
-
-        CheckGameEnd();
     }
 
     void UpdateTurnUI()
@@ -394,8 +402,7 @@ public class GameManager : MonoBehaviour
 
     async void SwitchTurn()
     {
-        if (_myTurn == false)
-            return;
+        UpdateTurnUI();
 
         _myTurn = false;
         currentPlayer = (currentPlayer + 1) % 2;
@@ -405,14 +412,14 @@ public class GameManager : MonoBehaviour
 
     public void QuitGame()
     {
-        Debug.Log("게임 종료 시도");
-
         #region Server
         SendByte(EXIT);
         TryDisconnect();
         #endregion
+        
+        Debug.Log("게임 종료 시도");
 
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
         #else
         Application.Quit();

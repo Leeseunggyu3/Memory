@@ -22,6 +22,8 @@ public class FullScreenTest : MonoBehaviour
 
         dropdown.ClearOptions();
         dropdown.AddOptions(options);
+
+        dropdown.value = 1; // 창 모드 시작
         dropdown.onValueChanged.AddListener(index => ChangeFullScreenMode((ScreenMode)index));
 
         switch (dropdown.value)
