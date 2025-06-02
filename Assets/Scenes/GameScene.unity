@@ -1431,12 +1431,12 @@ GameObject:
   - component: {fileID: 539119161}
   - component: {fileID: 539119160}
   m_Layer: 5
-  m_Name: Loading Popup
+  m_Name: LoadingPopup
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &539119159
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1922,13 +1922,13 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1169673971}
-        m_TargetAssemblyTypeName: 
-        m_MethodName: 
+      - m_Target: {fileID: 1169673972}
+        m_TargetAssemblyTypeName: GameManager, Assembly-CSharp
+        m_MethodName: Restart
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: 
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
           m_StringArgument: 
@@ -2157,7 +2157,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1169673972}
         m_TargetAssemblyTypeName: GameManager, Assembly-CSharp
-        m_MethodName: QuitGame
+        m_MethodName: ExitGame
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -2551,6 +2551,8 @@ MonoBehaviour:
   turnText: {fileID: 1122091187}
   player1ScoreText: {fileID: 160913366}
   player2ScoreText: {fileID: 154967185}
+  LoadingPopup: {fileID: 539119158}
+  PlayerLeftPopup: {fileID: 1816995122}
   startSound: {fileID: 8300000, guid: cffdb55df39fdc14bb2a39eb28a88f28, type: 3}
   mainSound: {fileID: 8300000, guid: e268290719bacd74897dfe2606c16bdb, type: 3}
   flipSound: {fileID: 8300000, guid: 5281d25b2cffe4f4697f8f25e7293040, type: 3}
@@ -3732,7 +3734,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1816995123
 RectTransform:
   m_ObjectHideFlags: 0

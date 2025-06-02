@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using static Define;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -43,6 +44,8 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI turnText;
     public TextMeshProUGUI player1ScoreText;
     public TextMeshProUGUI player2ScoreText;
+    public GameObject LoadingPopup;
+    public GameObject PlayerLeftPopup;
 
     [Header("사운드")]
     public AudioClip startSound;
@@ -92,6 +95,7 @@ public class GameManager : MonoBehaviour
     async void Start()
     {
         TryConnect();
+        _ = CheckConnected();
 
         AudioSource[] sources = GetComponents<AudioSource>();
         bgmSource = sources[0];
@@ -108,6 +112,9 @@ public class GameManager : MonoBehaviour
         if (startSound != null)
             audioSource.PlayOneShot(startSound);
 
+        PlayerLeftPopup.SetActive(false);
+
+        LoadingPopup.SetActive(true);
         await WaitForGameStart();
     }
 
@@ -147,6 +154,35 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    async Task CheckConnected()
+    {
+        while (true)
+        {
+            await Task.Delay(1000);
+
+            if (_client == null || _client.Client == null || _client.Connected == false)
+            {
+                PlayerLeftPopup.SetActive(true);
+                break;
+            }
+
+            try
+            {
+                Socket socket = _client.Client;
+                if (socket.Poll(1, SelectMode.SelectRead) && socket.Available == 0)
+                {
+                    PlayerLeftPopup.SetActive(true);
+                    break;
+                }
+            }
+            catch
+            {
+                PlayerLeftPopup.SetActive(true);
+                break;
+            }
+        }
+    }
+
     async Task WaitForGameStart()
     {
         Debug.Log("대기 중...\n플레이 인원이 모일 때까지 기다려주세요.");
@@ -161,6 +197,7 @@ public class GameManager : MonoBehaviour
 
         if (message == START_GAME)
         {
+            LoadingPopup.SetActive(false);
             GenerateCards();
             UpdateTurnUI();
 
@@ -195,7 +232,7 @@ public class GameManager : MonoBehaviour
 
             case EXIT:
                 Debug.Log($"다른 플레이어가 나갔습니다.");
-                QuitGame(); // TODO: 바로 끄지 않고, 팝업창 띄우기
+                PlayerLeftPopup.SetActive(true);
                 break;
         }
     }
@@ -209,7 +246,7 @@ public class GameManager : MonoBehaviour
 
         //int index = BitConverter.ToInt32(buffer, 0);  // 위의 주석과 이하동문
         int index = buffer[0];
-        Debug.Log($"서버로부터 수신: card index {index}");
+        //Debug.Log($"서버로부터 수신: card index {index}");
 
         CardUI card = allCards[index];
 
@@ -417,16 +454,23 @@ public class GameManager : MonoBehaviour
         await WaitForMyTurn();
     }
 
+    public void Restart()
+    {
+        SceneManager.LoadScene("GameScene");
+    }
+
     public void QuitGame()
     {
-        #region Server
         SendByte(EXIT);
         TryDisconnect();
-        #endregion
-        
-        Debug.Log("게임 종료 시도");
 
-#if UNITY_EDITOR
+        Debug.Log("게임 종료 시도");
+        ExitGame();
+    }
+
+    public void ExitGame()
+    {
+        #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
         #else
         Application.Quit();
@@ -502,7 +546,15 @@ public class GameManager : MonoBehaviour
 
     void SendByte(byte data)
     {
-        _stream.WriteByte(data);
+        try
+        {
+            _stream.WriteByte(data);
+        }
+        catch 
+        {
+            Debug.Log($"다른 플레이어가 나갔습니다.");
+            PlayerLeftPopup.SetActive(true);
+        }
     }
 
     void SendByte(byte[] bytes)
