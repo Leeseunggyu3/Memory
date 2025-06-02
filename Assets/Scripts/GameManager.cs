@@ -192,6 +192,11 @@ public class GameManager : MonoBehaviour
             case PICK_CARD:
                 ShowOpponentPickedCard();
                 break;
+
+            case EXIT:
+                Debug.Log($"다른 플레이어가 나갔습니다.");
+                QuitGame(); // TODO: 바로 끄지 않고, 팝업창 띄우기
+                break;
         }
     }
 
@@ -233,7 +238,7 @@ public class GameManager : MonoBehaviour
 
         for (int i = 0; i < MAX_CARD_COUNT; i++)
         {
-            Debug.Log($"서버로부터 수신: card id {_cards[i].id}");
+            //Debug.Log($"서버로부터 수신: card id {_cards[i].id}");
 
             #region Card UI 생성
             GameObject cardObj = Instantiate(cardPrefab, cardParent);
@@ -312,7 +317,7 @@ public class GameManager : MonoBehaviour
 
         #region Server
         int index = allCards.IndexOf(clickedCard);
-        Debug.Log($"card index {index} (id: {clickedCard.CardId})");
+        //Debug.Log($"card index {index} (id: {clickedCard.CardId})");
 
         SendByte(PICK_CARD);
         SendByte((byte)index);  // 선택한 카드 인덱스 서버에 전송
@@ -370,7 +375,8 @@ public class GameManager : MonoBehaviour
 
         callback?.Invoke();
 
-        CheckGameEnd();
+        if (CheckGameEnd())
+            yield break;
 
         if (match == false && myTurn)
             SwitchTurn();
@@ -383,12 +389,12 @@ public class GameManager : MonoBehaviour
         player2ScoreText.text = $"P2: {playerScores[1]}점";
     }
 
-    void CheckGameEnd()
+    bool CheckGameEnd()
     {
         foreach (CardUI card in allCards)
         {
             if (!card.IsLocked)
-                return;
+                return false;
         }
 
         if (gameEndSound != null)
@@ -397,7 +403,8 @@ public class GameManager : MonoBehaviour
         string winner = playerScores[0] > playerScores[1] ? "Player 1 승리!" :
                         playerScores[0] < playerScores[1] ? "Player 2 승리!" : "무승부!";
         turnText.text = $"게임 종료\n{winner}";
-        // TODO
+        
+        return true;
     }
 
     async void SwitchTurn()
