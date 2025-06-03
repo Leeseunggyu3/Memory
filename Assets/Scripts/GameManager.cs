@@ -3,12 +3,15 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using TMPro;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 using static Define;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -24,6 +27,7 @@ public struct Card // 카드 전송을 위해 만듦
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct Player
 {
+    public int id;
     public int score;
     [MarshalAs(UnmanagedType.I1)]
     public byte myturn;
@@ -92,6 +96,10 @@ public class GameManager : MonoBehaviour
     Card[] _cards = new Card[MAX_CARD_COUNT];
     Player[] _players = new Player[PLAYER_COUNT];
 
+    void Awake()
+    {
+        Application.runInBackground = true; // 백그라운드에서도 동작하게끔.
+    }
     async void Start()
     {
         TryConnect();
@@ -125,12 +133,12 @@ public class GameManager : MonoBehaviour
             _client = new TcpClient();
             _client.Connect(IP, PORT);
             _stream = _client.GetStream();
-            
+
             Debug.Log("서버에 연결되었습니다.");
 
             byte[] buffer = new byte[255];
             int read = _stream.Read(buffer, 0, buffer.Length);
-            
+
             string message = Encoding.UTF8.GetString(buffer, 0, read);
             Debug.Log("서버로부터 수신: " + message);
         }
@@ -205,7 +213,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    async Task WaitForMyTurn()  // 현재 누구 차례인지 서버로부터 받아야 함.
+    async Task WaitForMyTurn()  // 현재 누구 차례인지 서버로부터 받아야 함
     {
         Debug.Log("플레이어 차례 대기 중...");
 
@@ -235,13 +243,14 @@ public class GameManager : MonoBehaviour
                 PlayerLeftPopup.SetActive(true);
                 break;
         }
+        UpdateTurnUI();
     }
 
     async void ShowOpponentPickedCard()
     {
         //byte[] buffer = await Task.Run(() => RecvByte(4));    // 전달한 index는 byte 받아서 char형이다. 정수형 데이터로 받으면 안되니까 주석 처리
         byte[] buffer = await Task.Run(() => RecvByte(1));
-        if (buffer == null) 
+        if (buffer == null)
             return;
 
         //int index = BitConverter.ToInt32(buffer, 0);  // 위의 주석과 이하동문
@@ -262,7 +271,8 @@ public class GameManager : MonoBehaviour
         else
         {
             secondCard = card;
-            StartCoroutine(CheckMatch(false, async () => {
+            StartCoroutine(CheckMatch(false, async () =>
+            {
                 SendByte(UPDATE);
                 await WaitForMyTurn();
             }));
@@ -362,7 +372,7 @@ public class GameManager : MonoBehaviour
 
         audioSource.PlayOneShot(flipSound);
         clickedCard.FlipFront();
- 
+
         if (firstCard == null)
             firstCard = clickedCard;
         else
@@ -378,29 +388,30 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(1f);
         bool match = false;
 
-        //_players = RecvByteToStruct<Player>(_stream, PLAYER_COUNT); // 각 플레이어 정보 불러옴
-
         if (firstCard.CardId == secondCard.CardId) // 카드가 같다면
         {
-            match = true;
-            audioSource.PlayOneShot(matchSound);
+            _players = RecvByteToStruct<Player>(_stream, PLAYER_COUNT); // 각 플레이어 정보 불러옴
 
             for (int i = 0; i < PLAYER_COUNT; i++) // 플레이어 개수에 따라
             {
-                playerScores[currentPlayer] = _players[i].score; // 받아온 점수 업데이트
+                playerScores[i] = _players[i].score; // 받아온 점수 업데이트
                 Debug.Log($"플레이어{i}의 점수 : {playerScores[currentPlayer]}");
             }
+            match = true;
+            audioSource.PlayOneShot(matchSound);
 
             audioSource.PlayOneShot(matchSound);
             firstCard.PlayMatchEffect();
             secondCard.PlayMatchEffect();
-            
+
             firstCard.Lock();
             secondCard.Lock();
 
         }
         else
         {
+            _players = _players = RecvByteToStruct<Player>(_stream, PLAYER_COUNT); // 각 플레이어 정보 불러옴
+            UpdateTurnUI();
             audioSource.PlayOneShot(failSound);
             firstCard.FlipBack();
             secondCard.FlipBack();
@@ -415,13 +426,16 @@ public class GameManager : MonoBehaviour
         if (CheckGameEnd())
             yield break;
 
-        if (match == false && myTurn)
+        if (match == false && myTurn) // 카드를 못맞추고, 내 턴이 아닐때만 턴 전환을 함.
             SwitchTurn();
     }
 
     void UpdateTurnUI()
     {
-        turnText.text = $"Player {currentPlayer + 1}의 턴";
+        if (_players[0].id == 1 && _players[0].myturn == 1)
+            turnText.text = "플레이어2 차례";
+        else if (_players[1].id == 2 && _players[1].myturn == 1)
+            turnText.text = "플레이어1 차례";
         player1ScoreText.text = $"P1: {playerScores[0]}점";
         player2ScoreText.text = $"P2: {playerScores[1]}점";
     }
@@ -440,16 +454,16 @@ public class GameManager : MonoBehaviour
         string winner = playerScores[0] > playerScores[1] ? "Player 1 승리!" :
                         playerScores[0] < playerScores[1] ? "Player 2 승리!" : "무승부!";
         turnText.text = $"게임 종료\n{winner}";
-        
+
         return true;
     }
 
     async void SwitchTurn()
     {
-        UpdateTurnUI();
-
         _myTurn = false;
-        currentPlayer = (currentPlayer + 1) % 2;
+        currentPlayer = 0;
+
+        UpdateTurnUI();
 
         await WaitForMyTurn();
     }
@@ -470,11 +484,11 @@ public class GameManager : MonoBehaviour
 
     public void ExitGame()
     {
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
-        #else
+#else
         Application.Quit();
-        #endif
+#endif
     }
 
     #region Util
@@ -550,7 +564,7 @@ public class GameManager : MonoBehaviour
         {
             _stream.WriteByte(data);
         }
-        catch 
+        catch
         {
             Debug.Log($"다른 플레이어가 나갔습니다.");
             PlayerLeftPopup.SetActive(true);

@@ -2270,7 +2270,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "Player1 \uC758 \uD134"
+  m_text: "\uD50C\uB808\uC774\uC5B41 \uCC28\uB840"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: e41c9c9d69b4b7e419e26b6d5370a300, type: 2}
   m_sharedMaterial: {fileID: 6369015262008463437, guid: e41c9c9d69b4b7e419e26b6d5370a300, type: 2}
