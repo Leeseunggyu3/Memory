@@ -7,7 +7,10 @@ using UnityEngine.UI;
 public class CardUI : MonoBehaviour
 {
     public int CardId { get; private set; }      // 카드 종류를 구분하는 ID
-    public bool IsFlipped { get; private set; }  // 현재 앞면이 보이는 상태인가?
+    /// <summary>
+    /// 앞면 여부, 카드 중복 선택 방지
+    /// </summary>
+    public bool IsFlipped { get; private set; }
     public bool IsLocked { get; private set; }   // 맞춘 카드인가?
 
     public ParticleSystem matchEffect;
